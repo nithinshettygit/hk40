@@ -14,10 +14,10 @@ print("Dataset Preview:")
 print(df.head())
 
 # Select independent variables (weather conditions and air quality)
-x_df = df[['AQI', 'PM10', 'PM2_5', 'NO2', 'SO2', 'O3', 'Temperature', 'Humidity', 'WindSpeed']]
+x_df = df[['AQI', 'PM10', 'PM2_5', 'NO2', 'SO2']]
 
 # Target variable: Predicting RespiratoryCases
-y_df = df['RespiratoryCases']  # Modify this to predict other health issues if needed
+y_df = df['HealthImpactScore']  # Modify this to predict other health issues if needed
 
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(x_df, y_df, test_size=0.3, random_state=42)
@@ -43,11 +43,11 @@ mse = np.mean((prediction_test - y_test) ** 2)
 print("\nMean Squared Error (MSE) for Respiratory Cases:", mse)
 
 # Save the trained model using pickle
-pickle.dump(model, open('respiratory_cases_model.pkl', 'wb'))
-print("\nModel saved as 'respiratory_cases_model.pkl'")
+pickle.dump(model, open('HealthImpactScore2.pkl', 'wb'))
+print("\nModel saved as 'HealthImpactScore2.pkl'")
 
 # Load the model back (for demonstration)
-model = pickle.load(open('respiratory_cases_model.pkl', 'rb'))
+model = pickle.load(open('HealthImpactScore2.pkl', 'rb'))
 
 # Test the loaded model with a sample prediction (replace with sample values)
 sample_prediction = model.predict([[187.27, 295.85, 13.03, 6.63, 66.16, 54.62, 5.15, 84.42, 6.13]])
