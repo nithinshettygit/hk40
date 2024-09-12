@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 import pickle
 import logging
 from flask_cors import CORS
+import os
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -14,8 +15,10 @@ model1 = pickle.load(open('RespiratoryCases.pkl', 'rb'))
 model2 = pickle.load(open('CardiovascularCases.pkl', 'rb'))
 model3 = pickle.load(open('himpact.pkl', 'rb'))
 
-API_KEY = 'ef76c046cf45aaf0f94784dbf8f826fc'
+# Use environment variable for the API key (set in your system)
+API_KEY = os.getenv('WEATHER_API_KEY', 'ef76c046cf45aaf0f94784dbf8f826fc')
 
+# Get weather data
 def get_weather_data(city_name):
     weather_url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={API_KEY}&units=metric"
     logging.info(f"Requesting weather data for {city_name} from {weather_url}")
@@ -38,6 +41,7 @@ def get_weather_data(city_name):
         logging.error(f"Other error occurred: {err}")
         return None, "City not found or weather data unavailable."
 
+# Get air pollution data
 def get_air_pollution_data(lat, lon):
     air_pollution_url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API_KEY}"
     logging.info(f"Requesting air pollution data for coordinates ({lat}, {lon})")
@@ -47,8 +51,8 @@ def get_air_pollution_data(lat, lon):
         response.raise_for_status()
         data = response.json()
 
-        if data.get('cod') == 404:
-            logging.error(f"Air pollution data not found: {data.get('message')}")
+        if 'list' not in data or not data['list']:
+            logging.error("Air pollution data not found.")
             return None, "Air pollution data unavailable."
 
         return data, None
@@ -60,10 +64,44 @@ def get_air_pollution_data(lat, lon):
         logging.error(f"Other error occurred: {err}")
         return None, "Air pollution data unavailable."
 
+# Generate health advice based on predictions
+def generate_health_advice(resp_cases, card_cases, health_score):
+    advice = {}
+
+    # Respiratory cases advice
+    if resp_cases < 100:
+        advice['respiratory_advice'] = "Air quality is fair, respiratory risks are low."
+    elif 100 <= resp_cases < 200:
+        advice['respiratory_advice'] = "Moderate risk. People with pre-existing respiratory issues should stay indoors."
+    else:
+        advice['respiratory_advice'] = "High risk! Avoid outdoor activities, especially for those with respiratory conditions."
+
+    # Cardiovascular cases advice
+    if card_cases < 50:
+        advice['cardiovascular_advice'] = "Cardiovascular risk is minimal, no major precautions required."
+    elif 50 <= card_cases < 150:
+        advice['cardiovascular_advice'] = "Moderate cardiovascular risk. Elderly people should avoid strenuous activities."
+    else:
+        advice['cardiovascular_advice'] = "High cardiovascular risk! Avoid outdoor activities and strenuous exercises."
+
+    # Health impact score advice
+    if health_score < 80:
+        advice['health_impact_advice'] = "Overall health impact is low, no special precautions needed."
+    elif 80 <= health_score < 120:
+        advice['health_impact_advice'] = "Moderate health impact. Keep a watch on air quality and limit exposure."
+    else:
+        advice['health_impact_advice'] = "High health impact! It’s advised to stay indoors and use air purifiers."
+
+    return advice
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
     city_name = data.get('city')
+    
+    if not city_name:
+        return jsonify({"error": "City name is required."}), 400
+    
     weather_data, error_message = get_weather_data(city_name)
 
     if error_message:
@@ -80,7 +118,7 @@ def predict():
         lon = weather_data['coord']['lon']
         
     except KeyError as e:
-        return jsonify({"error": f"Missing data: {e}"}), 500
+        return jsonify({"error": f"Missing weather data: {e}"}), 500
 
     air_pollution_data, error_message = get_air_pollution_data(lat, lon)
 
@@ -108,6 +146,9 @@ def predict():
     except Exception as e:
         return jsonify({"error": f"Prediction error: {e}"}), 500
 
+    # Generate health advice
+    health_advice = generate_health_advice(output1, output2, output3)
+
     return jsonify({
         "city": city_name,
         "country": weather_data['sys']['country'],
@@ -122,7 +163,8 @@ def predict():
         "aqi": aqi,
         "respiratory_cases": output1,
         "cardiovascular_cases": output2,
-        "health_impact_score": output3
+        "health_impact_score": output3,
+        "advice": health_advice
     })
 
 if __name__ == "__main__":
