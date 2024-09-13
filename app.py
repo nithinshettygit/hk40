@@ -15,8 +15,28 @@ model1 = pickle.load(open('RespiratoryCases.pkl', 'rb'))
 model2 = pickle.load(open('CardiovascularCases.pkl', 'rb'))
 model3 = pickle.load(open('himpact.pkl', 'rb'))
 
+# Define the weather_disease_mapping
+weather_disease_mapping = {
+    "hot_weather": [
+        "Fungal_infection", "Allergy", "Diabetes", "Bronchial_Asthma", 
+        "Hypertension", "Migraine", "Chicken_pox", "Malaria", "Jaundice"
+    ],
+    "cold_weather": [
+        "Common_Cold", "Pneumonia", "Hypothyroidism", "Arthritis", "Osteoarthritis"
+    ],
+    "rainy": [
+        "Typhoid", "Dengue", "Gastroenteritis", "Tuberculosis", "Malaria"
+    ],
+    "high_humidity": [
+        "Acne", "Psoriasis", "Fungal_infections", "Allergy"
+    ]
+}
+
 # Use environment variable for the API key (set in your system)
 API_KEY = os.getenv('WEATHER_API_KEY', 'ef76c046cf45aaf0f94784dbf8f826fc')
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 # Get weather data
 def get_weather_data(city_name):
@@ -94,6 +114,35 @@ def generate_health_advice(resp_cases, card_cases, health_score):
 
     return advice
 
+def generate_health_advice1(resp_cases, card_cases, health_score):
+    precautions = {}
+
+    # Respiratory cases precautions for hospital administration
+    if resp_cases < 100:
+        precautions['respiratory_precautions'] = "No immediate action required. Ensure standard respiratory care facilities are available."
+    elif 100 <= resp_cases < 200:
+        precautions['respiratory_precautions'] = "Prepare for a moderate increase in respiratory cases. Consider allocating additional respiratory care units and monitoring bed availability."
+    else:
+        precautions['respiratory_precautions'] = "High influx of respiratory cases expected. Mobilize resources, allocate additional beds, ensure respiratory care units are fully staffed, and stock up on necessary medical supplies."
+
+    # Cardiovascular cases precautions for hospital administration
+    if card_cases < 50:
+        precautions['cardiovascular_precautions'] = "No immediate action required. Maintain regular cardiovascular care resources."
+    elif 50 <= card_cases < 150:
+        precautions['cardiovascular_precautions'] = "Anticipate a moderate rise in cardiovascular cases. Ensure availability of cardiovascular specialists and resources."
+    else:
+        precautions['cardiovascular_precautions'] = "Significant increase in cardiovascular cases expected. Prepare for patient influx by allocating more beds and staff to cardiovascular care, and ensure critical care resources are in place."
+
+    # Health impact score precautions for hospital administration
+    if health_score < 80:
+        precautions['health_impact_precautions'] = "No significant action required. Maintain standard operations and monitor air quality."
+    elif 80 <= health_score < 120:
+        precautions['health_impact_precautions'] = "Consider preventive measures. Keep a close watch on the patient flow and ensure extra capacity is available if needed."
+    else:
+        precautions['health_impact_precautions'] = "Severe health impact expected. Activate emergency protocols, mobilize staff, and ensure adequate supplies for high patient volume. Coordinate with emergency services if necessary."
+
+    return precautions
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
@@ -146,10 +195,25 @@ def predict():
     except Exception as e:
         return jsonify({"error": f"Prediction error: {e}"}), 500
 
+    # Determine weather condition
+    weather_condition = ""
+    if temp > 30:
+        weather_condition = "hot_weather"
+    elif temp < 10:
+        weather_condition = "cold_weather"
+    elif humidity > 80:
+        weather_condition = "high_humidity"
+    elif "rain" in weather_data['weather'][0]['description'].lower():
+        weather_condition = "rainy"
+
+    # Fetch medication based on weather condition
+    medications = weather_disease_mapping.get(weather_condition, [])
+
     # Generate health advice
     health_advice = generate_health_advice(output1, output2, output3)
+    health_advice1 = generate_health_advice1(output1, output2, output3)
 
-    return jsonify({
+    response_data = {
         "city": city_name,
         "country": weather_data['sys']['country'],
         "temperature": temp,
@@ -164,8 +228,12 @@ def predict():
         "respiratory_cases": output1,
         "cardiovascular_cases": output2,
         "health_impact_score": output3,
-        "advice": health_advice
-    })
+        "advice": health_advice,
+        "precautions": health_advice1,
+        "medications": medications
+    }
+    logging.info(f"Response data: {response_data}")
+    return jsonify(response_data)
 
 if __name__ == "__main__":
     app.run(debug=True)
